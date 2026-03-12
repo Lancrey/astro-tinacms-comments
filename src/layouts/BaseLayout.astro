@@ -1,0 +1,30 @@
+---
+interface Props {
+  title: string;
+  lang?: string;
+}
+
+const { title, lang = 'en' } = Astro.props;
+---
+
+<!DOCTYPE html>
+<html lang={lang}>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{title}</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      line-height: 1.6;
+      color: #111827;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <slot />
+</body>
+</html>

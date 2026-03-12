@@ -1,0 +1,372 @@
+---
+import { t, detectLang } from '../i18n/comments';
+import type { Lang } from '../i18n/comments';
+
+interface Props {
+  slug: string;
+  lang?: Lang;
+}
+
+const { slug, lang: langProp } = Astro.props;
+const lang = langProp || detectLang(Astro.url.pathname);
+const i = t(lang);
+
+const API_URL = import.meta.env.PUBLIC_COMMENTS_API_URL;
+
+interface Comment {
+  id: string;
+  author: string;
+  date: string;
+  content: string;
+}
+
+let comments: Comment[] = [];
+let fetchError = false;
+
+if (API_URL) {
+  try {
+    const res = await fetch(`${API_URL}?page=${encodeURIComponent(slug)}`);
+    if (res.ok) {
+      comments = await res.json();
+    } else {
+      fetchError = true;
+    }
+  } catch {
+    fetchError = true;
+  }
+}
+
+function hashColor(name: string): string {
+  let hash = 0;
+  for (let c = 0; c < name.length; c++) {
+    hash = name.charCodeAt(c) + ((hash << 5) - hash);
+  }
+  const hue = Math.abs(hash) % 360;
+  return `hsl(${hue}, 55%, 45%)`;
+}
+
+function formatDate(dateStr: string, locale: string): string {
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });
+  } catch {
+    return dateStr;
+  }
+}
+
+const localeMap: Record<string, string> = { en: 'en-US', fr: 'fr-FR', es: 'es-ES' };
+const locale = localeMap[lang] || 'en-US';
+---
+
+<section class="comments-section" data-slug={slug} data-api={API_URL} data-lang={lang}>
+  <h2>{i.commentsTitle}</h2>
+
+  <div class="comments-list" id="comments-list">
+    {comments.length === 0 && !fetchError && (
+      <p class="no-comments">{i.noComments}</p>
+    )}
+    {fetchError && (
+      <p class="no-comments">{i.errorMessage}</p>
+    )}
+    {comments.map((c) => (
+      <article class="comment">
+        <div class="comment-header">
+          <span class="avatar" style={`background-color: ${hashColor(c.author)}`}>
+            {c.author.charAt(0).toUpperCase()}
+          </span>
+          <div class="comment-meta">
+            <strong class="comment-author">{c.author}</strong>
+            <time class="comment-date" datetime={c.date}>
+              {formatDate(c.date, locale)}
+            </time>
+          </div>
+        </div>
+        <div class="comment-body">{c.content}</div>
+      </article>
+    ))}
+  </div>
+
+  <div id="comment-form-wrapper">
+    <h3>{i.leaveComment}</h3>
+    <form id="comment-form" novalidate>
+      <div class="form-group">
+        <label for="comment-author">{i.nameLabel}</label>
+        <input
+          type="text"
+          id="comment-author"
+          name="author"
+          required
+          maxlength="100"
+          placeholder={i.namePlaceholder}
+        />
+      </div>
+      <div class="form-group">
+        <label for="comment-email">{i.emailLabel}</label>
+        <input
+          type="email"
+          id="comment-email"
+          name="email"
+          required
+          placeholder={i.emailPlaceholder}
+        />
+      </div>
+      <div class="form-group">
+        <label for="comment-content">{i.commentLabel}</label>
+        <textarea
+          id="comment-content"
+          name="content"
+          required
+          maxlength="2000"
+          rows="5"
+          placeholder={i.commentPlaceholder}
+        ></textarea>
+        <span class="char-count" id="char-count">0/2000</span>
+      </div>
+      <!-- Honeypot -->
+      <div style="display:none" aria-hidden="true">
+        <input type="text" name="website" tabindex="-1" autocomplete="off" />
+      </div>
+      <button type="submit" id="submit-btn">{i.submitButton}</button>
+    </form>
+    <div id="comment-success" class="message success" hidden>
+      {i.successMessage}
+    </div>
+    <div id="comment-error" class="message error" hidden></div>
+  </div>
+</section>
+
+<script>
+  document.addEventListener('astro:page-load', initComments);
+  document.addEventListener('DOMContentLoaded', initComments);
+
+  let initialized = false;
+  function initComments() {
+    if (initialized) return;
+    const section = document.querySelector('.comments-section') as HTMLElement | null;
+    if (!section) return;
+    initialized = true;
+
+    const form = document.getElementById('comment-form') as HTMLFormElement | null;
+    const successEl = document.getElementById('comment-success') as HTMLElement;
+    const errorEl = document.getElementById('comment-error') as HTMLElement;
+    const submitBtn = document.getElementById('submit-btn') as HTMLButtonElement;
+    const textarea = document.getElementById('comment-content') as HTMLTextAreaElement;
+    const charCount = document.getElementById('char-count') as HTMLElement;
+
+    const slug = section.dataset.slug || '';
+    const api = section.dataset.api || '';
+    const lang = section.dataset.lang || 'en';
+
+    const labels: Record<string, { submitting: string; submit: string; success: string; error: string }> = {
+      en: { submitting: 'Submitting...', submit: 'Submit', success: 'Thank you! Your comment is pending moderation.', error: 'An error occurred. Please try again.' },
+      fr: { submitting: 'Envoi en cours...', submit: 'Envoyer', success: 'Merci\u00a0! Votre commentaire est en attente de modération.', error: 'Une erreur est survenue. Veuillez réessayer.' },
+      es: { submitting: 'Enviando...', submit: 'Enviar', success: '\u00a1Gracias! Tu comentario está pendiente de moderación.', error: 'Ocurrió un error. Por favor, inténtalo de nuevo.' },
+    };
+    const l = labels[lang] || labels.en;
+
+    if (textarea && charCount) {
+      textarea.addEventListener('input', () => {
+        charCount.textContent = textarea.value.length + '/2000';
+      });
+    }
+
+    if (!form || !api) return;
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorEl.hidden = true;
+      submitBtn.disabled = true;
+      submitBtn.textContent = l.submitting;
+
+      const formData = new FormData(form);
+      const payload = {
+        page: slug,
+        author: formData.get('author') as string,
+        email: formData.get('email') as string,
+        content: formData.get('content') as string,
+        honeypot: formData.get('website') as string,
+      };
+
+      try {
+        const res = await fetch(api, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+
+        if (data.ok) {
+          form.hidden = true;
+          (form.previousElementSibling as HTMLElement).hidden = true; // hide h3
+          successEl.hidden = false;
+        } else {
+          errorEl.textContent = data.error || l.error;
+          errorEl.hidden = false;
+          submitBtn.disabled = false;
+          submitBtn.textContent = l.submit;
+        }
+      } catch {
+        errorEl.textContent = l.error;
+        errorEl.hidden = false;
+        submitBtn.disabled = false;
+        submitBtn.textContent = l.submit;
+      }
+    });
+  }
+</script>
+
+<style>
+  .comments-section {
+    max-width: 720px;
+    margin: 2rem auto;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+
+  .comments-section h2 {
+    font-size: 1.5rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 2px solid #e5e7eb;
+    padding-bottom: 0.5rem;
+  }
+
+  .comments-list {
+    margin-bottom: 2rem;
+  }
+
+  .no-comments {
+    color: #6b7280;
+    font-style: italic;
+  }
+
+  .comment {
+    padding: 1rem 0;
+    border-bottom: 1px solid #f3f4f6;
+  }
+
+  .comment:last-child {
+    border-bottom: none;
+  }
+
+  .comment-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .avatar {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 700;
+    font-size: 0.95rem;
+    flex-shrink: 0;
+  }
+
+  .comment-meta {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .comment-author {
+    font-size: 0.95rem;
+  }
+
+  .comment-date {
+    font-size: 0.8rem;
+    color: #9ca3af;
+  }
+
+  .comment-body {
+    margin-left: 3rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* Form */
+  #comment-form-wrapper h3 {
+    font-size: 1.15rem;
+    margin-bottom: 1rem;
+  }
+
+  .form-group {
+    margin-bottom: 1rem;
+  }
+
+  .form-group label {
+    display: block;
+    font-weight: 600;
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .form-group input,
+  .form-group textarea {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    font-family: inherit;
+    box-sizing: border-box;
+  }
+
+  .form-group input:focus,
+  .form-group textarea:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+  }
+
+  .char-count {
+    display: block;
+    text-align: right;
+    font-size: 0.75rem;
+    color: #9ca3af;
+    margin-top: 0.25rem;
+  }
+
+  button[type='submit'] {
+    background: #4f46e5;
+    color: white;
+    border: none;
+    padding: 0.6rem 1.5rem;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  button[type='submit']:hover {
+    background: #4338ca;
+  }
+
+  button[type='submit']:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .message {
+    padding: 1rem;
+    border-radius: 6px;
+    margin-top: 1rem;
+    font-size: 0.95rem;
+  }
+
+  .message.success {
+    background: #ecfdf5;
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+  }
+
+  .message.error {
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+  }
+</style>
