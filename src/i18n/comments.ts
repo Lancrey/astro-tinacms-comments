@@ -16,7 +16,13 @@ export const translations = {
     errorMessage: 'An error occurred. Please try again.',
     leaveComment: 'Leave a comment',
     charCount: (n: number) => `${n}/2000`,
-    // Admin
+    // CAPTCHA
+    captchaLabel: 'Security check',
+    captchaLoading: 'Loading challenge...',
+    captchaRefresh: 'New challenge',
+    captchaFailed: 'Incorrect CAPTCHA answer. Please try again.',
+    captchaError: 'Could not load challenge. Click refresh.',
+    // Admin — Comments
     adminTitle: 'Comment Moderation',
     tokenLabel: 'Admin Token',
     tokenPlaceholder: 'Enter your secret token',
@@ -32,6 +38,22 @@ export const translations = {
     content: 'Content',
     actionSuccess: 'Action completed successfully.',
     actionError: 'Action failed. Please try again.',
+    // Admin — CAPTCHA
+    captchaAdminTitle: 'CAPTCHA Management',
+    captchaLoadBtn: 'Load CAPTCHA items',
+    captchaAddTitle: 'Add a CAPTCHA item',
+    captchaEditTitle: 'Edit CAPTCHA item',
+    captchaTargetWord: 'Target word',
+    captchaCorrectAnswer: 'Correct answer',
+    captchaDistractor: 'Distractor',
+    captchaAddBtn: 'Add',
+    captchaSaveBtn: 'Save',
+    captchaCancelBtn: 'Cancel',
+    captchaImportTitle: 'Bulk import',
+    captchaImportHelp: 'Paste JSON array or CSV (target_word, correct_answer, distractor_1, distractor_2, distractor_3)',
+    captchaImportPlaceholder: '[{"target_word":"Broom","correct_answer":"Floor","distractor_1":"Toilet","distractor_2":"Aladdin","distractor_3":"Dance"}]',
+    captchaImportJSON: 'Import as JSON',
+    captchaImportCSV: 'Import as CSV',
   },
   fr: {
     commentsTitle: 'Commentaires',
@@ -48,7 +70,13 @@ export const translations = {
     errorMessage: 'Une erreur est survenue. Veuillez réessayer.',
     leaveComment: 'Laisser un commentaire',
     charCount: (n: number) => `${n}/2000`,
-    // Admin
+    // CAPTCHA
+    captchaLabel: 'Vérification de sécurité',
+    captchaLoading: 'Chargement du défi...',
+    captchaRefresh: 'Nouveau défi',
+    captchaFailed: 'Mauvaise réponse au CAPTCHA. Veuillez réessayer.',
+    captchaError: 'Impossible de charger le défi. Cliquez sur rafraîchir.',
+    // Admin — Comments
     adminTitle: 'Modération des commentaires',
     tokenLabel: 'Token admin',
     tokenPlaceholder: 'Entrez votre token secret',
@@ -64,6 +92,22 @@ export const translations = {
     content: 'Contenu',
     actionSuccess: 'Action effectuée avec succès.',
     actionError: 'Action échouée. Veuillez réessayer.',
+    // Admin — CAPTCHA
+    captchaAdminTitle: 'Gestion des CAPTCHA',
+    captchaLoadBtn: 'Charger les éléments CAPTCHA',
+    captchaAddTitle: 'Ajouter un élément CAPTCHA',
+    captchaEditTitle: 'Modifier l\'élément CAPTCHA',
+    captchaTargetWord: 'Mot cible',
+    captchaCorrectAnswer: 'Bonne réponse',
+    captchaDistractor: 'Distracteur',
+    captchaAddBtn: 'Ajouter',
+    captchaSaveBtn: 'Enregistrer',
+    captchaCancelBtn: 'Annuler',
+    captchaImportTitle: 'Import en masse',
+    captchaImportHelp: 'Collez un tableau JSON ou CSV (target_word, correct_answer, distractor_1, distractor_2, distractor_3)',
+    captchaImportPlaceholder: '[{"target_word":"Balai","correct_answer":"Sol","distractor_1":"WC","distractor_2":"Aladin","distractor_3":"Danse"}]',
+    captchaImportJSON: 'Importer en JSON',
+    captchaImportCSV: 'Importer en CSV',
   },
   es: {
     commentsTitle: 'Comentarios',
@@ -80,7 +124,13 @@ export const translations = {
     errorMessage: 'Ocurrió un error. Por favor, inténtalo de nuevo.',
     leaveComment: 'Dejar un comentario',
     charCount: (n: number) => `${n}/2000`,
-    // Admin
+    // CAPTCHA
+    captchaLabel: 'Verificación de seguridad',
+    captchaLoading: 'Cargando desafío...',
+    captchaRefresh: 'Nuevo desafío',
+    captchaFailed: 'Respuesta CAPTCHA incorrecta. Inténtalo de nuevo.',
+    captchaError: 'No se pudo cargar el desafío. Haz clic en actualizar.',
+    // Admin — Comments
     adminTitle: 'Moderación de comentarios',
     tokenLabel: 'Token de administrador',
     tokenPlaceholder: 'Ingresa tu token secreto',
@@ -96,6 +146,22 @@ export const translations = {
     content: 'Contenido',
     actionSuccess: 'Acción completada con éxito.',
     actionError: 'Acción fallida. Por favor, inténtalo de nuevo.',
+    // Admin — CAPTCHA
+    captchaAdminTitle: 'Gestión de CAPTCHA',
+    captchaLoadBtn: 'Cargar elementos CAPTCHA',
+    captchaAddTitle: 'Añadir un elemento CAPTCHA',
+    captchaEditTitle: 'Editar elemento CAPTCHA',
+    captchaTargetWord: 'Palabra objetivo',
+    captchaCorrectAnswer: 'Respuesta correcta',
+    captchaDistractor: 'Distractor',
+    captchaAddBtn: 'Añadir',
+    captchaSaveBtn: 'Guardar',
+    captchaCancelBtn: 'Cancelar',
+    captchaImportTitle: 'Importación masiva',
+    captchaImportHelp: 'Pega un array JSON o CSV (target_word, correct_answer, distractor_1, distractor_2, distractor_3)',
+    captchaImportPlaceholder: '[{"target_word":"Escoba","correct_answer":"Suelo","distractor_1":"Inodoro","distractor_2":"Aladino","distractor_3":"Baile"}]',
+    captchaImportJSON: 'Importar como JSON',
+    captchaImportCSV: 'Importar como CSV',
   },
 } as const;
 

@@ -8,17 +8,33 @@ A lightweight, self-hosted comment system for Astro static sites using Google Sh
 Visitor → Astro Component → Google Apps Script (Web App) → Google Sheets
 ```
 
+**Security flow for CAPTCHA (stateless, HMAC-signed):**
+
+```
+1. Client loads form  →  GET ?action=captcha  →  Apps Script picks random challenge
+2. Apps Script returns: target_word, shuffled choices[], signed challenge_token
+   (token = HMAC-SHA256 of captcha_id|correct_answer|expiry, using SECRET_TOKEN as key)
+3. User selects an answer (correct answer is NOT in the HTML/JS — only the 4 shuffled labels)
+4. Client submits: comment data + challenge_token + captcha_answer
+5. Apps Script verifies HMAC signature, checks expiry, compares answer → accept or reject
+```
+
 ## Setup
 
 ### 1. Create the Google Sheet
 
 1. Go to [Google Sheets](https://sheets.google.com) and create a new spreadsheet
-2. Rename the first sheet tab to **`comments`**
-3. Add headers in row 1:
+2. Create a tab named **`comments`** with headers in row 1:
 
 | A  | B         | C          | D      | E     | F       | G      |
 |----|-----------|------------|--------|-------|---------|--------|
 | id | timestamp | page_slug  | author | email | content | status |
+
+3. Create a second tab named **`captcha`** with headers in row 1:
+
+| A  | B           | C              | D            | E            | F            |
+|----|-------------|----------------|--------------|--------------|--------------|
+| id | target_word | correct_answer | distractor_1 | distractor_2 | distractor_3 |
 
 4. Note the **Sheet ID** from the URL: `https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit`
 
@@ -52,7 +68,34 @@ npm install
 npm run dev
 ```
 
-### 4. Integrate in your pages
+### 4. Add CAPTCHA items
+
+Navigate to `/admin/captcha` on your site. Enter your `SECRET_TOKEN`, then either:
+
+- **Add items manually** using the form
+- **Bulk import** by pasting JSON or CSV
+
+**JSON format:**
+```json
+[
+  {
+    "target_word": "Broom",
+    "correct_answer": "Floor",
+    "distractor_1": "Toilet",
+    "distractor_2": "Aladdin",
+    "distractor_3": "Dance"
+  }
+]
+```
+
+**CSV format:**
+```
+target_word,correct_answer,distractor_1,distractor_2,distractor_3
+Broom,Floor,Toilet,Aladdin,Dance
+Umbrella,Rain,Sun,Car,Book
+```
+
+### 5. Integrate in your pages
 
 ```astro
 ---
@@ -71,9 +114,10 @@ You can pass an explicit language:
 
 Supported languages: `en`, `fr`, `es`. By default, the language is detected from the URL path (`/fr/...` → French, `/es/...` → Spanish, otherwise English).
 
-### 5. Admin moderation
+### 6. Admin
 
-Navigate to `/admin/comments` on your site. Enter your `SECRET_TOKEN` to load and moderate pending comments.
+- **Comment moderation**: `/admin/comments` — approve or reject pending comments
+- **CAPTCHA management**: `/admin/captcha` — add, edit, delete, or bulk-import CAPTCHA items
 
 ## File Structure
 
@@ -82,7 +126,7 @@ Navigate to `/admin/comments` on your site. Enter your `SECRET_TOKEN` to load an
 │   └── Code.gs              # Google Apps Script (paste into script editor)
 ├── src/
 │   ├── components/
-│   │   └── Comments.astro    # Comment display + submission form
+│   │   └── Comments.astro    # Comment display + form + CAPTCHA challenge
 │   ├── i18n/
 │   │   └── comments.ts       # Translations (EN/FR/ES)
 │   ├── layouts/
@@ -90,7 +134,8 @@ Navigate to `/admin/comments` on your site. Enter your `SECRET_TOKEN` to load an
 │   └── pages/
 │       ├── index.astro       # Example page with comments
 │       └── admin/
-│           └── comments.astro # Admin moderation panel
+│           ├── comments.astro # Comment moderation panel
+│           └── captcha.astro  # CAPTCHA CRUD + bulk import
 ├── .env.example
 ├── astro.config.mjs
 ├── package.json
@@ -100,17 +145,21 @@ Navigate to `/admin/comments` on your site. Enter your `SECRET_TOKEN` to load an
 ## Features
 
 - **No external dependencies**: vanilla JS, no framework in client-side code
-- **Spam protection**: honeypot field
-- **Moderation**: all comments require approval before being displayed
-- **Privacy**: email addresses are never exposed publicly
-- **i18n**: English, French, Spanish out of the box
-- **SSG compatible**: comments are fetched at build time, with client-side form submission
-- **Accessible**: semantic HTML, proper labels, keyboard navigation
+- **Custom semantic CAPTCHA**: association-based challenges (e.g. "Broom" → "Floor")
+- **Secure CAPTCHA**: correct answer never sent to client; HMAC-signed tokens with 10-minute expiry
+- **Honeypot**: additional anti-spam layer (hidden field)
+- **Moderation**: all comments require approval before display
+- **Privacy**: email addresses never exposed in public API
+- **i18n**: English, French, Spanish
+- **SSG compatible**: comments fetched at build time, CAPTCHA + form handled client-side
+- **CAPTCHA admin**: full CRUD + bulk JSON/CSV import
 
-## Security Notes
+## CAPTCHA Security Model
 
-- The `SECRET_TOKEN` is never exposed in client-side code
-- The admin page sends the token only when explicitly entered by the admin
-- Email addresses are stored in the sheet but never returned in the public API
-- The honeypot field silently rejects automated submissions
-- Content is HTML-escaped when rendered
+The CAPTCHA system uses **HMAC-SHA256 signed tokens** to avoid the need for server-side sessions (Apps Script is stateless):
+
+1. **No answer in HTML/JS**: The client only receives `target_word` and 4 shuffled `choices`. There is no CSS class, data attribute, or JS variable that reveals the correct answer.
+2. **Signed token**: The challenge token contains `captcha_id|correct_answer|expiry` signed with `SECRET_TOKEN` via HMAC-SHA256. It cannot be forged or tampered with.
+3. **Expiry**: Tokens expire after 10 minutes.
+4. **Server verification**: On submission, Apps Script decodes the token, verifies the HMAC signature, checks expiry, and compares the user's answer.
+5. **On failure**: A new challenge is automatically loaded, preventing brute-force.

@@ -1,0 +1,455 @@
+---
+import { t, detectLang } from '../../i18n/comments';
+import type { Lang } from '../../i18n/comments';
+
+const lang = detectLang(Astro.url.pathname) as Lang;
+const i = t(lang);
+const API_URL = import.meta.env.PUBLIC_COMMENTS_API_URL;
+---
+
+<!DOCTYPE html>
+<html lang={lang}>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{i.captchaAdminTitle}</title>
+  <meta name="robots" content="noindex, nofollow" />
+</head>
+<body>
+  <main class="admin-panel" data-api={API_URL}>
+    <h1>{i.captchaAdminTitle}</h1>
+    <nav class="admin-nav">
+      <a href="/admin/comments">{i.adminTitle}</a>
+      <span class="nav-active">{i.captchaAdminTitle}</span>
+    </nav>
+
+    <!-- Auth -->
+    <div class="auth-section">
+      <label for="admin-token">{i.tokenLabel}</label>
+      <div class="auth-row">
+        <input type="password" id="admin-token" placeholder={i.tokenPlaceholder} />
+        <button id="load-btn">{i.captchaLoadBtn}</button>
+      </div>
+    </div>
+
+    <div id="status-message" class="status" hidden></div>
+
+    <!-- Add single item -->
+    <details class="add-section" id="add-section">
+      <summary>{i.captchaAddTitle}</summary>
+      <form id="add-form" class="captcha-form">
+        <div class="form-row">
+          <label>{i.captchaTargetWord}<input type="text" name="target_word" required /></label>
+          <label>{i.captchaCorrectAnswer}<input type="text" name="correct_answer" required /></label>
+        </div>
+        <div class="form-row">
+          <label>{i.captchaDistractor} 1<input type="text" name="distractor_1" required /></label>
+          <label>{i.captchaDistractor} 2<input type="text" name="distractor_2" required /></label>
+          <label>{i.captchaDistractor} 3<input type="text" name="distractor_3" required /></label>
+        </div>
+        <button type="submit">{i.captchaAddBtn}</button>
+      </form>
+    </details>
+
+    <!-- Bulk import -->
+    <details class="import-section" id="import-section">
+      <summary>{i.captchaImportTitle}</summary>
+      <p class="import-help">{i.captchaImportHelp}</p>
+      <textarea id="import-data" rows="8" placeholder={i.captchaImportPlaceholder}></textarea>
+      <div class="import-actions">
+        <button id="import-json-btn">{i.captchaImportJSON}</button>
+        <button id="import-csv-btn">{i.captchaImportCSV}</button>
+      </div>
+    </details>
+
+    <!-- Items list -->
+    <div id="items-list" class="items-list"></div>
+
+    <!-- Edit modal -->
+    <div id="edit-modal" class="modal" hidden>
+      <div class="modal-content">
+        <h3>{i.captchaEditTitle}</h3>
+        <form id="edit-form" class="captcha-form">
+          <input type="hidden" name="id" id="edit-id" />
+          <div class="form-row">
+            <label>{i.captchaTargetWord}<input type="text" name="target_word" id="edit-target" required /></label>
+            <label>{i.captchaCorrectAnswer}<input type="text" name="correct_answer" id="edit-correct" required /></label>
+          </div>
+          <div class="form-row">
+            <label>{i.captchaDistractor} 1<input type="text" name="distractor_1" id="edit-d1" required /></label>
+            <label>{i.captchaDistractor} 2<input type="text" name="distractor_2" id="edit-d2" required /></label>
+            <label>{i.captchaDistractor} 3<input type="text" name="distractor_3" id="edit-d3" required /></label>
+          </div>
+          <div class="modal-actions">
+            <button type="submit">{i.captchaSaveBtn}</button>
+            <button type="button" id="edit-cancel">{i.captchaCancelBtn}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const panel = document.querySelector('.admin-panel') as HTMLElement;
+      const api = panel.dataset.api || '';
+      const tokenInput = document.getElementById('admin-token') as HTMLInputElement;
+      const loadBtn = document.getElementById('load-btn') as HTMLButtonElement;
+      const statusEl = document.getElementById('status-message') as HTMLElement;
+      const itemsList = document.getElementById('items-list') as HTMLElement;
+
+      const addForm = document.getElementById('add-form') as HTMLFormElement;
+      const importData = document.getElementById('import-data') as HTMLTextAreaElement;
+      const importJsonBtn = document.getElementById('import-json-btn') as HTMLButtonElement;
+      const importCsvBtn = document.getElementById('import-csv-btn') as HTMLButtonElement;
+
+      const editModal = document.getElementById('edit-modal') as HTMLElement;
+      const editForm = document.getElementById('edit-form') as HTMLFormElement;
+      const editCancel = document.getElementById('edit-cancel') as HTMLButtonElement;
+      const editId = document.getElementById('edit-id') as HTMLInputElement;
+      const editTarget = document.getElementById('edit-target') as HTMLInputElement;
+      const editCorrect = document.getElementById('edit-correct') as HTMLInputElement;
+      const editD1 = document.getElementById('edit-d1') as HTMLInputElement;
+      const editD2 = document.getElementById('edit-d2') as HTMLInputElement;
+      const editD3 = document.getElementById('edit-d3') as HTMLInputElement;
+
+      function getToken() { return tokenInput.value.trim(); }
+
+      function showStatus(msg: string, isError = false) {
+        statusEl.textContent = msg;
+        statusEl.className = 'status ' + (isError ? 'error' : 'info');
+        statusEl.hidden = false;
+        setTimeout(() => { statusEl.hidden = true; }, 4000);
+      }
+
+      async function apiPost(body: any) {
+        const res = await fetch(api, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify(body),
+        });
+        return res.json();
+      }
+
+      function escapeHtml(str: string): string {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+      }
+
+      // ─── Load items ──────────────────────────────────────────────────
+
+      async function loadItems() {
+        const token = getToken();
+        if (!token) return;
+        loadBtn.disabled = true;
+        itemsList.innerHTML = '';
+
+        try {
+          const res = await fetch(`${api}?action=admin_captcha&token=${encodeURIComponent(token)}`);
+          const data = await res.json();
+
+          if (data.ok === false) {
+            showStatus(data.error, true);
+            return;
+          }
+
+          if (!Array.isArray(data) || data.length === 0) {
+            itemsList.innerHTML = '<p class="empty">No CAPTCHA items configured.</p>';
+            return;
+          }
+
+          renderItems(data);
+        } catch {
+          showStatus('Failed to load items', true);
+        } finally {
+          loadBtn.disabled = false;
+        }
+      }
+
+      function renderItems(items: any[]) {
+        itemsList.innerHTML = `<p class="item-count">${items.length} item(s)</p>`;
+        const table = document.createElement('table');
+        table.innerHTML = `<thead><tr>
+          <th>ID</th><th>Target</th><th>Answer</th>
+          <th>D1</th><th>D2</th><th>D3</th><th>Actions</th>
+        </tr></thead>`;
+        const tbody = document.createElement('tbody');
+
+        items.forEach((item) => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${escapeHtml(String(item.id))}</td>
+            <td>${escapeHtml(item.target_word)}</td>
+            <td><strong>${escapeHtml(item.correct_answer)}</strong></td>
+            <td>${escapeHtml(item.distractor_1)}</td>
+            <td>${escapeHtml(item.distractor_2)}</td>
+            <td>${escapeHtml(item.distractor_3)}</td>
+            <td class="action-cell">
+              <button class="btn-edit" data-item='${escapeHtml(JSON.stringify(item))}'>Edit</button>
+              <button class="btn-delete" data-id="${item.id}">Delete</button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+        table.appendChild(tbody);
+        itemsList.appendChild(table);
+
+        tbody.querySelectorAll('.btn-edit').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const item = JSON.parse(btn.getAttribute('data-item')!);
+            openEditModal(item);
+          });
+        });
+
+        tbody.querySelectorAll('.btn-delete').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const id = btn.getAttribute('data-id')!;
+            if (!confirm('Delete this item?')) return;
+            const data = await apiPost({ action: 'captcha_delete', token: getToken(), id });
+            if (data.ok) {
+              showStatus('Deleted');
+              loadItems();
+            } else {
+              showStatus(data.error || 'Failed', true);
+            }
+          });
+        });
+      }
+
+      // ─── Add item ────────────────────────────────────────────────────
+
+      addForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fd = new FormData(addForm);
+        const data = await apiPost({
+          action: 'captcha_add',
+          token: getToken(),
+          target_word: fd.get('target_word'),
+          correct_answer: fd.get('correct_answer'),
+          distractor_1: fd.get('distractor_1'),
+          distractor_2: fd.get('distractor_2'),
+          distractor_3: fd.get('distractor_3'),
+        });
+        if (data.ok) {
+          showStatus('Added (ID: ' + data.id + ')');
+          addForm.reset();
+          loadItems();
+        } else {
+          showStatus(data.error || 'Failed', true);
+        }
+      });
+
+      // ─── Edit item ───────────────────────────────────────────────────
+
+      function openEditModal(item: any) {
+        editId.value = item.id;
+        editTarget.value = item.target_word;
+        editCorrect.value = item.correct_answer;
+        editD1.value = item.distractor_1;
+        editD2.value = item.distractor_2;
+        editD3.value = item.distractor_3;
+        editModal.hidden = false;
+      }
+
+      editCancel.addEventListener('click', () => { editModal.hidden = true; });
+
+      editForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const data = await apiPost({
+          action: 'captcha_edit',
+          token: getToken(),
+          id: editId.value,
+          target_word: editTarget.value,
+          correct_answer: editCorrect.value,
+          distractor_1: editD1.value,
+          distractor_2: editD2.value,
+          distractor_3: editD3.value,
+        });
+        if (data.ok) {
+          editModal.hidden = true;
+          showStatus('Updated');
+          loadItems();
+        } else {
+          showStatus(data.error || 'Failed', true);
+        }
+      });
+
+      // ─── Bulk import ─────────────────────────────────────────────────
+
+      importJsonBtn.addEventListener('click', async () => {
+        try {
+          const items = JSON.parse(importData.value);
+          if (!Array.isArray(items)) throw new Error('Expected an array');
+          const data = await apiPost({ action: 'captcha_import', token: getToken(), items });
+          if (data.ok) {
+            showStatus('Imported ' + data.imported + ' item(s)');
+            importData.value = '';
+            loadItems();
+          } else {
+            showStatus(data.error || 'Failed', true);
+          }
+        } catch (err: any) {
+          showStatus('Invalid JSON: ' + err.message, true);
+        }
+      });
+
+      importCsvBtn.addEventListener('click', async () => {
+        try {
+          const lines = importData.value.trim().split('\n').filter((l: string) => l.trim());
+          if (lines.length === 0) throw new Error('Empty input');
+
+          // Skip header if it looks like one
+          let start = 0;
+          if (lines[0].toLowerCase().includes('target_word')) start = 1;
+
+          const items: any[] = [];
+          for (let i = start; i < lines.length; i++) {
+            const cols = lines[i].split(/[,;\t]/).map((s: string) => s.trim().replace(/^["']|["']$/g, ''));
+            if (cols.length < 5) continue;
+            items.push({
+              target_word: cols[0],
+              correct_answer: cols[1],
+              distractor_1: cols[2],
+              distractor_2: cols[3],
+              distractor_3: cols[4],
+            });
+          }
+
+          if (items.length === 0) throw new Error('No valid rows found');
+
+          const data = await apiPost({ action: 'captcha_import', token: getToken(), items });
+          if (data.ok) {
+            showStatus('Imported ' + data.imported + ' item(s)');
+            importData.value = '';
+            loadItems();
+          } else {
+            showStatus(data.error || 'Failed', true);
+          }
+        } catch (err: any) {
+          showStatus('CSV error: ' + err.message, true);
+        }
+      });
+
+      // ─── Init ────────────────────────────────────────────────────────
+
+      loadBtn.addEventListener('click', loadItems);
+      tokenInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadItems(); });
+    });
+  </script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f9fafb;
+      color: #111827;
+      min-height: 100vh;
+    }
+
+    .admin-panel {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 2rem 1rem;
+    }
+
+    h1 { font-size: 1.75rem; margin-bottom: 0.5rem; }
+
+    .admin-nav {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      font-size: 0.9rem;
+    }
+    .admin-nav a {
+      color: #4f46e5;
+      text-decoration: none;
+    }
+    .admin-nav a:hover { text-decoration: underline; }
+    .nav-active { color: #6b7280; font-weight: 600; }
+
+    .auth-section { margin-bottom: 1.5rem; }
+    .auth-section label { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.4rem; }
+    .auth-row { display: flex; gap: 0.5rem; }
+    .auth-row input {
+      flex: 1; padding: 0.5rem 0.75rem; border: 1px solid #d1d5db;
+      border-radius: 6px; font-size: 0.95rem;
+    }
+    .auth-row input:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.15); }
+
+    .auth-row button, details summary, .import-actions button,
+    .captcha-form button[type="submit"], .modal-actions button {
+      padding: 0.5rem 1rem; border: none; border-radius: 6px;
+      font-size: 0.9rem; font-weight: 600; cursor: pointer;
+    }
+
+    .auth-row button { background: #4f46e5; color: white; }
+    .auth-row button:hover { background: #4338ca; }
+    .auth-row button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .status {
+      padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.9rem;
+    }
+    .status.info { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+    .status.error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+
+    details { margin-bottom: 1rem; }
+    details summary {
+      background: #f3f4f6; color: #374151; list-style: none;
+      user-select: none;
+    }
+    details summary::-webkit-details-marker { display: none; }
+    details[open] summary { margin-bottom: 0.75rem; }
+
+    .captcha-form { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1rem; }
+    .form-row { display: flex; gap: 0.75rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
+    .form-row label { flex: 1; min-width: 140px; font-size: 0.85rem; font-weight: 600; }
+    .form-row input {
+      display: block; width: 100%; margin-top: 0.2rem;
+      padding: 0.4rem 0.6rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 0.9rem;
+    }
+    .captcha-form button[type="submit"] { background: #059669; color: white; }
+    .captcha-form button[type="submit"]:hover { background: #047857; }
+
+    .import-help { font-size: 0.85rem; color: #6b7280; margin-bottom: 0.5rem; }
+    #import-data {
+      width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 6px;
+      font-family: monospace; font-size: 0.85rem; margin-bottom: 0.5rem;
+    }
+    .import-actions { display: flex; gap: 0.5rem; }
+    .import-actions button { background: #4f46e5; color: white; }
+    .import-actions button:hover { background: #4338ca; }
+
+    .item-count { font-size: 0.85rem; color: #6b7280; margin-bottom: 0.5rem; }
+    .empty { color: #6b7280; font-style: italic; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    thead { background: #f3f4f6; }
+    th, td { padding: 0.5rem 0.6rem; text-align: left; border-bottom: 1px solid #e5e7eb; }
+    .action-cell { white-space: nowrap; }
+    .btn-edit, .btn-delete {
+      padding: 0.25rem 0.6rem; border: none; border-radius: 4px;
+      font-size: 0.8rem; font-weight: 600; cursor: pointer; margin-right: 0.25rem;
+    }
+    .btn-edit { background: #eef2ff; color: #4f46e5; }
+    .btn-edit:hover { background: #e0e7ff; }
+    .btn-delete { background: #fef2f2; color: #dc2626; }
+    .btn-delete:hover { background: #fee2e2; }
+
+    /* Modal */
+    .modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+      display: flex; align-items: center; justify-content: center; z-index: 100;
+    }
+    .modal-content {
+      background: white; border-radius: 10px; padding: 1.5rem; width: 90%; max-width: 600px;
+    }
+    .modal-content h3 { margin-bottom: 1rem; }
+    .modal-actions { display: flex; gap: 0.5rem; }
+    .modal-actions button:first-child { background: #059669; color: white; }
+    .modal-actions button:last-child { background: #f3f4f6; color: #374151; }
+  </style>
+</body>
+</html>

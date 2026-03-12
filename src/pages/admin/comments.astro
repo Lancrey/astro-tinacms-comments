@@ -18,6 +18,10 @@ const API_URL = import.meta.env.PUBLIC_COMMENTS_API_URL;
 <body>
   <main class="admin-panel" data-api={API_URL}>
     <h1>{i.adminTitle}</h1>
+    <nav class="admin-nav">
+      <span class="nav-active">{i.adminTitle}</span>
+      <a href="/admin/captcha">{i.captchaAdminTitle}</a>
+    </nav>
 
     <div class="auth-section">
       <label for="admin-token">{i.tokenLabel}</label>
@@ -207,8 +211,18 @@ const API_URL = import.meta.env.PUBLIC_COMMENTS_API_URL;
 
     h1 {
       font-size: 1.75rem;
-      margin-bottom: 1.5rem;
+      margin-bottom: 0.5rem;
     }
+
+    .admin-nav {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      font-size: 0.9rem;
+    }
+    .admin-nav a { color: #4f46e5; text-decoration: none; }
+    .admin-nav a:hover { text-decoration: underline; }
+    .nav-active { color: #6b7280; font-weight: 600; }
 
     .auth-section {
       margin-bottom: 1.5rem;
