@@ -48,45 +48,50 @@ function getSecret() {
 // ─── CAPTCHA Token (HMAC-signed, stateless) ─────────────────────────────────────
 
 /**
- * Creates a signed challenge token containing the captcha ID, correct answer,
- * and an expiry timestamp. The token is never readable by the client.
+ * The public token contains only the CAPTCHA ID and expiry. Its HMAC also
+ * authenticates the correct answer, without disclosing that answer.
  */
+function normalizeCaptchaAnswer(answer) {
+  return String(answer).trim().toLowerCase();
+}
+
 function createCaptchaToken(captchaId, correctAnswer) {
   var secret = getSecret();
+  if (!secret) throw new Error('SECRET_TOKEN not configured in Script Properties');
+
   var expiry = new Date().getTime() + 10 * 60 * 1000; // 10 minutes
-  var payload = captchaId + '|' + correctAnswer + '|' + expiry;
-  var signature = computeHmac(secret, payload);
-  // Return base64-encoded: payload + '.' + signature
+  var payload = captchaId + '|' + expiry;
+  var signature = computeHmac(secret, payload + '|' + normalizeCaptchaAnswer(correctAnswer));
+
+  // Base64 encodes only non-secret fields; the signature binds the answer.
   return Utilities.base64Encode(payload) + '.' + signature;
 }
 
 function verifyCaptchaToken(token, userAnswer) {
-  if (!token || !userAnswer) return false;
+  if (typeof token !== 'string' || typeof userAnswer !== 'string' || !userAnswer.trim()) {
+    return false;
+  }
+
   var secret = getSecret();
+  if (!secret) return false;
 
   try {
     var parts = token.split('.');
     if (parts.length !== 2) return false;
 
     var payload = Utilities.newBlob(Utilities.base64Decode(parts[0])).getDataAsString();
-    var signature = parts[1];
-
-    // Verify signature
-    var expectedSig = computeHmac(secret, payload);
-    if (signature !== expectedSig) return false;
-
-    // Parse payload
     var segments = payload.split('|');
-    if (segments.length !== 3) return false;
+    if (segments.length !== 2 || !/^\d+$/.test(segments[1])) return false;
 
-    var correctAnswer = segments[1];
-    var expiry = parseInt(segments[2], 10);
+    var expiry = Number(segments[1]);
+    if (!Number.isFinite(expiry) || new Date().getTime() > expiry) return false;
 
-    // Check expiry
-    if (new Date().getTime() > expiry) return false;
-
-    // Check answer (case-insensitive trim)
-    return userAnswer.trim().toLowerCase() === correctAnswer.trim().toLowerCase();
+    // A wrong answer produces a different HMAC. No answer is exposed in token.
+    var expectedSig = computeHmac(
+      secret,
+      payload + '|' + normalizeCaptchaAnswer(userAnswer)
+    );
+    return parts[1] === expectedSig;
   } catch (e) {
     return false;
   }
