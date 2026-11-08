@@ -13,8 +13,8 @@ Visitor → Astro Component → Google Apps Script (Web App) → Google Sheets
 ```
 1. Client loads form  →  GET ?action=captcha  →  Apps Script picks random challenge
 2. Apps Script returns: target_word, shuffled choices[], signed challenge_token
-   (token = HMAC-SHA256 of captcha_id|correct_answer|expiry, using SECRET_TOKEN as key)
-3. User selects an answer (correct answer is NOT in the HTML/JS — only the 4 shuffled labels)
+   (token = base64(captcha_id|expiry) + HMAC-SHA256(captcha_id|expiry|normalized_answer, SECRET_TOKEN))
+3. User selects an answer (the 4 labels are visible, but none is marked correct and the token does not reveal which one)
 4. Client submits: comment data + challenge_token + captcha_answer
 5. Apps Script verifies HMAC signature, checks expiry, compares answer → accept or reject
 ```
@@ -146,7 +146,7 @@ Supported languages: `en`, `fr`, `es`. By default, the language is detected from
 
 - **No external dependencies**: vanilla JS, no framework in client-side code
 - **Custom semantic CAPTCHA**: association-based challenges (e.g. "Broom" → "Floor")
-- **Secure CAPTCHA**: correct answer never sent to client; HMAC-signed tokens with 10-minute expiry
+- **Signed CAPTCHA**: the correct answer is not disclosed by the token; HMAC-signed challenges expire after 10 minutes
 - **Honeypot**: additional anti-spam layer (hidden field)
 - **Moderation**: all comments require approval before display
 - **Privacy**: email addresses never exposed in public API
@@ -159,7 +159,13 @@ Supported languages: `en`, `fr`, `es`. By default, the language is detected from
 The CAPTCHA system uses **HMAC-SHA256 signed tokens** to avoid the need for server-side sessions (Apps Script is stateless):
 
 1. **No answer in HTML/JS**: The client only receives `target_word` and 4 shuffled `choices`. There is no CSS class, data attribute, or JS variable that reveals the correct answer.
-2. **Signed token**: The challenge token contains `captcha_id|correct_answer|expiry` signed with `SECRET_TOKEN` via HMAC-SHA256. It cannot be forged or tampered with.
+2. **Signed token**: The Base64 payload contains only `captcha_id|expiry`. The HMAC-SHA256 is computed over `captcha_id|expiry|normalized_answer` using `SECRET_TOKEN`, so a visitor cannot derive the answer by decoding the token. The answer is checked by verifying the HMAC against the chosen label.
 3. **Expiry**: Tokens expire after 10 minutes.
-4. **Server verification**: On submission, Apps Script decodes the token, verifies the HMAC signature, checks expiry, and compares the user's answer.
-5. **On failure**: A new challenge is automatically loaded, preventing brute-force.
+4. **Server verification**: On submission, Apps Script checks expiry and recomputes the HMAC using the visitor's selected answer. A wrong answer produces a different signature.
+5. **On failure**: A new challenge is loaded automatically. This does not by itself prevent repeated guesses or token replay.
+
+## Security limitations and deployment notes
+
+- Each four-choice challenge still has a 25% chance of being guessed blindly. This stateless token can also be replayed until it expires. For sites exposed to sustained abuse, add server-side rate limiting and/or single-use challenge tracking.
+- After updating `google-apps-script/Code.gs`, publish a new Google Apps Script web-app version. Previously issued CAPTCHA tokens are intentionally incompatible with the corrected format; visitors should refresh their challenge.
+- Run `npm test` to verify the token secrecy, correct/incorrect answer handling, tamper detection, and expiry checks. The tests use Node.js mocks for Google Apps Script utilities; a live deployment must still be tested separately.
