@@ -158,7 +158,7 @@ Supported languages: `en`, `fr`, `es`. By default, the language is detected from
 
 The CAPTCHA system uses **HMAC-SHA256 signed tokens** to avoid the need for server-side sessions (Apps Script is stateless):
 
-1. **No answer in HTML/JS**: The client only receives `target_word` and 4 shuffled `choices`. There is no CSS class, data attribute, or JS variable that reveals the correct answer.
+1. **No answer indicator in HTML/JS**: The client receives `target_word` and 4 shuffled `choices` (including the correct answer), but no CSS class, data attribute, token payload, or JS variable identifies which choice is correct.
 2. **Signed token**: The Base64 payload contains only `captcha_id|expiry`. The HMAC-SHA256 is computed over `captcha_id|expiry|normalized_answer` using `SECRET_TOKEN`, so a visitor cannot derive the answer by decoding the token. The answer is checked by verifying the HMAC against the chosen label.
 3. **Expiry**: Tokens expire after 10 minutes.
 4. **Server verification**: On submission, Apps Script checks expiry and recomputes the HMAC using the visitor's selected answer. A wrong answer produces a different signature.
